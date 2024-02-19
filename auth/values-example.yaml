@@ -1,0 +1,50 @@
+secret:
+  name: env
+
+namespace:
+  name: todo-auth
+
+database:
+  service:
+    type: ClusterIP
+    ports:
+      name: tcp
+  labels:
+    app: pg-auth
+  deployment:
+    image:
+      name: postgres
+      tag: alpine
+    replicas: 1
+  secret:
+    name: postgres
+    host: pg-auth
+    password: postgres
+    user: postgres
+    port: 5432
+
+auth:
+  service:
+    type: NodePort
+    ports:
+      name: http
+      nodePort: 30009
+  labels:
+    app: todo-auth
+  deployment:
+    replicas: 2
+    strategy:
+      rollingUpdate:
+        maxSurge: 1
+    image:
+      name: todo-auth-image
+      tag: todo-auth-tag
+    probe:
+      path: "/docs"
+      initialDelaySeconds: 5
+      periodSeconds: 5
+  secret:
+    containerHost: 0.0.0.0
+    host: todo-auth
+    port: "8000"
+    workers: "3"
