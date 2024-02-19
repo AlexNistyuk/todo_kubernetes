@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.auth.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.auth.labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.auth.deployment.replicas }}
+  strategy:
+    {{- toYaml .Values.auth.deployment.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.auth.labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.auth.labels | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Values.auth.secret.host }}
+        image: {{ .Values.auth.deployment.image.name }}:{{ .Values.auth.deployment.image.tag }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.auth.deployment.probe.path }}
+            port: {{ .Values.auth.secret.port }}
+          initialDelaySeconds: {{ .Values.auth.deployment.probe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.auth.deployment.probe.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.auth.deployment.probe.path }}
+            port: {{ .Values.auth.secret.port }}
+          initialDelaySeconds: {{ .Values.auth.deployment.probe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.auth.deployment.probe.periodSeconds }}
+        ports:
+        - containerPort: {{ .Values.auth.secret.port }}
+        envFrom:
+          - secretRef:
+              name: {{ .Values.secret.name }}
+
+#
+#      readinessProbe:
+#        exec:
+#          command:
+#            - /bin/sh
+#            - -c
+#            - exec pg_isready -U "postgres" -h 127.0.0.1 -p 5432
