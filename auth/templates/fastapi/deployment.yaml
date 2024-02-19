@@ -20,6 +20,7 @@ spec:
       containers:
       - name: {{ .Values.auth.secret.host }}
         image: {{ .Values.auth.deployment.image.name }}:{{ .Values.auth.deployment.image.tag }}
+        command: {{ .Values.auth.deployment.command }}
         readinessProbe:
           httpGet:
             path: {{ .Values.auth.deployment.probe.path }}
@@ -37,11 +38,3 @@ spec:
         envFrom:
           - secretRef:
               name: {{ .Values.secret.name }}
-
-#
-#      readinessProbe:
-#        exec:
-#          command:
-#            - /bin/sh
-#            - -c
-#            - exec pg_isready -U "postgres" -h 127.0.0.1 -p 5432

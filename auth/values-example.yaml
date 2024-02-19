@@ -37,8 +37,9 @@ auth:
       rollingUpdate:
         maxSurge: 1
     image:
-      name: todo-auth-image
-      tag: todo-auth-tag
+      name: image-name
+      tag: 0.1.1
+    command: [./entrypoints/fastapi.sh]
     probe:
       path: "/docs"
       initialDelaySeconds: 5
