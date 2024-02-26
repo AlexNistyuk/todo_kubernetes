@@ -38,3 +38,12 @@ spec:
         envFrom:
           - secretRef:
               name: {{ .Values.secret.name }}
+        volumeMounts:
+          - name: {{ .Values.auth.deployment.envVolume.name }}
+            mountPath: {{ .Values.auth.envFile.directory }}/{{ .Values.auth.envFile.name }}
+            subPath: {{ .Values.auth.envFile.name }}
+            readOnly: {{ .Values.auth.deployment.envVolume.readonly }}
+      volumes:
+        - name: {{ .Values.auth.deployment.envVolume.name }}
+          secret:
+            secretName: {{ .Values.auth.secret.name }}

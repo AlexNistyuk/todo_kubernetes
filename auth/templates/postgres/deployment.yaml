@@ -23,4 +23,11 @@ spec:
         envFrom:
           - secretRef:
               name: {{ .Values.secret.name }}
+        volumeMounts:
+          - mountPath: {{ .Values.database.volumes.mountPath }}
+            name: {{ .Values.database.volumes.name }}
+      volumes:
+        - name: {{ .Values.database.volumes.name }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.database.persistentVolumeClaim.name }}
 

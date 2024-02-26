@@ -1,10 +1,20 @@
 secret:
-  name: env
+  name: todo-auth
 
 namespace:
   name: todo-auth
 
 database:
+  persistentVolumeClaim:
+    name: postgres-claim
+    accessModes:
+      - ReadWriteOnce
+    resources:
+      requests:
+        storage: 100Mi
+  volumes:
+    name: postgres-data
+    mountPath: /var/lib/postgresql/data
   service:
     type: ClusterIP
     ports:
@@ -22,30 +32,62 @@ database:
     password: postgres
     user: postgres
     port: 5432
+    poolSize: 10
+    maxOverflow: 10
 
 auth:
   service:
-    type: NodePort
+    type: ClusterIP
     ports:
       name: http
-      nodePort: 30009
   labels:
     app: todo-auth
   deployment:
-    replicas: 2
+    replicas: 1
     strategy:
       rollingUpdate:
         maxSurge: 1
     image:
-      name: image-name
+      name: image
       tag: 0.1.1
     command: [./entrypoints/fastapi.sh]
     probe:
       path: "/docs"
       initialDelaySeconds: 5
       periodSeconds: 5
+    envVolume:
+      name: todo-auth-env-volume
+      readonly: true
+  envFile:
+    name: .env
+    directory: /fastapi_todo_auth
   secret:
+    name: todo-auth-secret-env
     containerHost: 0.0.0.0
     host: todo-auth
     port: "8000"
     workers: "3"
+    jwtSecretKey: ws2s1x%#3f$*&2r!els0a_a)q-*lv+vm+&ck-ob1yigi^lw)0
+    jwtAccessTokenExpiresIn: 15
+    jwtRefreshTokenExpiresIn: 1
+    jwtAlgorithm: HS256
+    httpAuthHeader: Authorization
+    httpAuthKeyword: Bearer
+    superuserUsername: admin
+    superuserPassword: admin
+  job:
+    name: todo-auth-job
+    command: [./entrypoints/migrations.sh]
+    restartPolicy: Never
+    backoffLimit: 5
+
+storageClass:
+  name: manual
+
+persistentVolume:
+  name: todo-auth
+  storageCapacity: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /var/todo/auth/postgres
