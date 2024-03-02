@@ -1,0 +1,224 @@
+---
+# Source: test/templates/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: todo-auth
+---
+# Source: test/templates/fastapi/env-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todo-auth-secret-env
+  namespace: todo-auth
+stringData:
+  .env: |
+    POSTGRES_HOST=pg-auth
+    POSTGRES_PORT=5432
+    POSTGRES_DB=postgres
+    POSTGRES_USER=postgres
+    POSTGRES_PASSWORD=postgres
+    DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?async_fallback=True
+    DB_POOL_SIZE=10
+    DB_MAX_OVERFLOW=10
+    
+    JWT_SECRET_KEY=ws2s1x%#3f$*&2r!els0a_a)q-*lv+vm+&ck-ob1yigi^lw)0
+    JWT_ACCESS_TOKEN_EXPIRES_IN=15
+    JWT_REFRESH_TOKEN_EXPIRES_IN=1
+    JWT_ALGORITHM=HS256
+    
+    HTTP_AUTH_HEADER=Authorization
+    HTTP_AUTH_KEYWORD=Bearer
+    
+    SUPERUSER_USERNAME=admin
+    SUPERUSER_PASSWORD=admin
+---
+# Source: test/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todo-auth
+  namespace: todo-auth
+stringData:
+  POSTGRES_DB: "postgres"
+  POSTGRES_HOST: pg-auth
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_USER: postgres
+  POSTGRES_PORT: "5432"
+  WEB_CONTAINER_HOST: 0.0.0.0
+  WEB_HOST: todo-auth
+  WEB_PORT: "8000"
+  WORKERS: "3"
+---
+# Source: test/templates/pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: todo-auth
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /var/todo/auth/postgres
+---
+# Source: test/templates/postgres/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-claim
+  namespace: todo-auth
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+---
+# Source: test/templates/fastapi/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-auth
+  namespace: todo-auth
+  labels:
+    app: todo-auth
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  selector:
+    app: todo-auth
+---
+# Source: test/templates/postgres/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-auth
+  namespace: todo-auth
+  labels:
+    app: pg-auth
+spec:
+  type: ClusterIP
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+  selector:
+    app: pg-auth
+---
+# Source: test/templates/fastapi/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-auth
+  namespace: todo-auth
+  labels:
+    app: todo-auth
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: todo-auth
+  template:
+    metadata:
+      labels:
+        app: todo-auth
+    spec:
+      containers:
+      - name: todo-auth
+        image: prokaznik/todo_auth:0.1.1
+        command: [./entrypoints/fastapi.sh]
+        readinessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        ports:
+        - containerPort: 8000
+        envFrom:
+          - secretRef:
+              name: todo-auth
+        volumeMounts:
+          - name: todo-auth-env-volume
+            mountPath: /fastapi_todo_auth/.env
+            subPath: .env
+            readOnly: true
+      volumes:
+        - name: todo-auth-env-volume
+          secret:
+            secretName: todo-auth-secret-env
+---
+# Source: test/templates/postgres/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pg-auth
+  namespace: todo-auth
+  labels:
+    app: pg-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pg-auth
+  template:
+    metadata:
+      labels:
+        app: pg-auth
+    spec:
+      containers:
+      - name: pg-auth
+        image: postgres:alpine
+        ports:
+          - containerPort: 5432
+        envFrom:
+          - secretRef:
+              name: todo-auth
+        volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            name: postgres-data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-claim
+---
+# Source: test/templates/fastapi/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: todo-auth-job
+  namespace: todo-auth
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      containers:
+      - name: todo-auth-job
+        image: prokaznik/todo_auth:0.1.1
+        command: [./entrypoints/migrations.sh]
+        volumeMounts:
+          - name: todo-auth-env-volume
+            mountPath: /fastapi_todo_auth/.env
+            subPath: .env
+            readOnly: true
+      volumes:
+        - name: todo-auth-env-volume
+          secret:
+            secretName: todo-auth-secret-env
+      restartPolicy: Never

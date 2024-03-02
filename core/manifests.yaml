@@ -1,0 +1,224 @@
+---
+# Source: test/templates/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: todo-core
+---
+# Source: test/templates/fastapi/env-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todo-core-secret-env
+  namespace: todo-core
+stringData:
+  .env: |
+    POSTGRES_HOST=pg-core
+    POSTGRES_PORT=5432
+    POSTGRES_DB=postgres
+    POSTGRES_USER=postgres
+    POSTGRES_PASSWORD=postgres
+    DB_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?async_fallback=True
+    DB_POOL_SIZE=10
+    DB_MAX_OVERFLOW=10
+    
+    USER_INFO_URL=http://todo-auth.todo-auth:8000/api/v1/token/user-info
+    
+    KAFKA_TOPIC=actions
+    KAFKA_URL=kafka-mq.mq:9092
+---
+# Source: test/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todo-core
+  namespace: todo-core
+stringData:
+  POSTGRES_DB: "postgres"
+  POSTGRES_HOST: "pg-core"
+  POSTGRES_PASSWORD: "postgres"
+  POSTGRES_USER: "postgres"
+  POSTGRES_PORT: "5432"
+  WEB_CONTAINER_HOST: "0.0.0.0"
+  WEB_HOST: "todo-core"
+  WEB_PORT: "8000"
+  WORKERS: "3"
+---
+# Source: test/templates/pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: todo-core
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /var/todo/core/postgres
+---
+# Source: test/templates/postgres/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-claim
+  namespace: todo-core
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+---
+# Source: test/templates/fastapi/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-core
+  namespace: todo-core
+  labels:
+    app: todo-core
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  selector:
+    app: todo-core
+---
+# Source: test/templates/postgres/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg-core
+  namespace: todo-core
+  labels:
+    app: pg-core
+spec:
+  type: ClusterIP
+  ports:
+  - name: tcp
+    port: 5432
+    targetPort: 5432
+  selector:
+    app: pg-core
+---
+# Source: test/templates/fastapi/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-core
+  namespace: todo-core
+  labels:
+    app: todo-core
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: todo-core
+  template:
+    metadata:
+      labels:
+        app: todo-core
+    spec:
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox
+          command: [ "/bin/sh","-c" ]
+          args: [ "until nc -z kafka-mq.mq 9092; do sleep 1; done;" ]
+
+      containers:
+      - name: todo-core
+        image: prokaznik/todo_core:0.1.1
+        command: [./entrypoints/fastapi.sh]
+        readinessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        ports:
+        - containerPort: 8000
+        envFrom:
+          - secretRef:
+              name: todo-core
+        volumeMounts:
+          - name: todo-core-env-volume
+            mountPath: /fastapi_todo_core/.env
+            subPath: .env
+            readOnly: true
+      volumes:
+        - name: todo-core-env-volume
+          secret:
+            secretName: todo-core-secret-env
+---
+# Source: test/templates/postgres/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pg-core
+  namespace: todo-core
+  labels:
+    app: pg-core
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pg-core
+  template:
+    metadata:
+      labels:
+        app: pg-core
+    spec:
+      containers:
+      - name: pg-core
+        image: postgres:alpine
+        ports:
+          - containerPort: 5432
+        envFrom:
+          - secretRef:
+              name: todo-core
+        volumeMounts:
+          - mountPath: /var/lib/postgresql/data
+            name: postgres-data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-claim
+---
+# Source: test/templates/fastapi/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: todo-core-job
+  namespace: todo-core
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      containers:
+      - name: todo-core-job
+        image: prokaznik/todo_core:0.1.1
+        command: [./entrypoints/migrations.sh]
+        volumeMounts:
+          - name: todo-core-env-volume
+            mountPath: /fastapi_todo_core/.env
+            subPath: .env
+            readOnly: true
+      volumes:
+        - name: todo-core-env-volume
+          secret:
+            secretName: todo-core-secret-env
+      restartPolicy: Never

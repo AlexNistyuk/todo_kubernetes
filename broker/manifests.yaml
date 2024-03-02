@@ -1,0 +1,117 @@
+---
+# Source: test/templates/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mq
+---
+# Source: test/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mq
+  namespace: mq
+stringData:
+  ZOOKEEPER_HOST: "zookeeper-mq"
+  ZOOKEEPER_CLIENT_PORT: "2181"
+  ZOOKEEPER_TICK_TIME: "2000"
+  KAFKA_ZOOKEEPER_CONNECT: "zookeeper-mq:2181"
+  KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-mq.mq:9092"
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+  KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: "1"
+  KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+---
+# Source: test/templates/kafka/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-mq
+  namespace: mq
+  labels:
+    app: kafka-mq
+spec:
+  type: ClusterIP
+  ports:
+  - name: tcp
+    port: 9092
+    targetPort: 9092
+  selector:
+    app: kafka-mq
+---
+# Source: test/templates/zookeeper/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper-mq
+  namespace: mq
+  labels:
+    app: zookeeper-mq
+spec:
+  type: ClusterIP
+  ports:
+  - name: tcp
+    port: 2181
+    targetPort: 2181
+  selector:
+    app: zookeeper-mq
+---
+# Source: test/templates/kafka/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-mq
+  namespace: mq
+  labels:
+    app: kafka-mq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-mq
+  template:
+    metadata:
+      labels:
+        app: kafka-mq
+    spec:
+      initContainers:
+      - name: wait-for-zookeeper
+        image: busybox
+        command: [ "/bin/sh","-c" ]
+        args: [ "until nc -z zookeeper-mq 2181; do sleep 1; done;" ]
+      containers:
+      - name: kafka-mq
+        image: confluentinc/cp-kafka:7.2.1
+        ports:
+          - containerPort: 9092
+        envFrom:
+          - secretRef:
+              name: mq
+---
+# Source: test/templates/zookeeper/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper-mq
+  namespace: mq
+  labels:
+    app: zookeeper-mq
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper-mq
+  template:
+    metadata:
+      labels:
+        app: zookeeper-mq
+    spec:
+      containers:
+      - name: zookeeper-mq
+        image: confluentinc/cp-zookeeper:7.2.1
+        ports:
+          - containerPort: 2181
+        envFrom:
+          - secretRef:
+              name: mq

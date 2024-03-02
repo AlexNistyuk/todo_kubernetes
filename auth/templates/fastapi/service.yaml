@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.auth.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.auth.labels | nindent 4 }}
+spec:
+  type: {{ .Values.auth.service.type }}
+  ports:
+  - name: {{ .Values.auth.service.ports.name }}
+    port: {{ .Values.auth.secret.port }}
+    targetPort: {{ .Values.auth.secret.port }}
+  selector:
+    {{- toYaml .Values.auth.labels | nindent 4 }}

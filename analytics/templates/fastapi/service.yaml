@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.analytics.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.analytics.labels | nindent 4 }}
+spec:
+  type: {{ .Values.analytics.service.type }}
+  ports:
+  - name: {{ .Values.analytics.service.ports.name }}
+    port: {{ .Values.analytics.secret.port }}
+    targetPort: {{ .Values.analytics.secret.port }}
+  selector:
+    {{- toYaml .Values.analytics.labels | nindent 4 }}

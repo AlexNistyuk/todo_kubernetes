@@ -1,0 +1,259 @@
+---
+# Source: test/templates/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: todo-analytics
+---
+# Source: test/templates/fastapi/env-secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todo-analytics-secret-env
+  namespace: todo-analytics
+stringData:
+  .env: |
+    DB_HOST=dynamodb-analytics
+    DB_PORT=4566
+    DB_URL=http://${DB_HOST}:${DB_PORT}
+  
+    AWS_ACCESS_KEY_ID=qz9YeGHpVw
+    AWS_SECRET_ACCESS_KEY=J7kYlcwCjaKk0gl32XlbgVsKfA7oxAzF
+    AWS_REGION=us-east-1
+    
+    USER_INFO_URL=http://todo-auth.todo-auth:8000/api/v1/token/user-info
+    
+    KAFKA_URL=kafka-mq.mq:9092
+    KAFKA_TOPIC=actions
+    CONSUMER_GROUP=analytics
+---
+# Source: test/templates/secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: todo-analytics
+  namespace: todo-analytics
+stringData:
+  WEB_CONTAINER_HOST: "0.0.0.0"
+  WEB_PORT: "8000"
+  WORKERS: "3"
+  SERVICES: "dynamodb"
+  DEBUG: "0"
+  PERSISTENCE: "1"
+---
+# Source: test/templates/pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: todo-analytics
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 100Mi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /var/todo/analytics/dynamodb
+---
+# Source: test/templates/dynamodb/pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dynamodb-claim
+  namespace: todo-analytics
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Mi
+---
+# Source: test/templates/dynamodb/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamodb-analytics
+  namespace: todo-analytics
+  labels:
+    app: dynamodb-analytics
+spec:
+  type: ClusterIP
+  ports:
+  - name: tcp
+    port: 4566
+    targetPort: 4566
+  selector:
+    app: dynamodb-analytics
+---
+# Source: test/templates/fastapi/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo-analytics
+  namespace: todo-analytics
+  labels:
+    app: todo-analytics
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  selector:
+    app: todo-analytics
+---
+# Source: test/templates/consumer/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-consumer
+  namespace: todo-analytics
+  labels:
+    app: kafka-consumer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka-consumer
+  template:
+    metadata:
+      labels:
+        app: kafka-consumer
+    spec:
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox
+          command: [ "/bin/sh","-c" ]
+          args: [ "until nc -z kafka-mq.mq 9092; do sleep 1; done;" ]
+
+      containers:
+      - name: kafka-consumer
+        image: prokaznik/todo_analytics:0.1.1
+        command: [./entrypoints/kafka-consumer.sh]
+        volumeMounts:
+          - name: todo-analytics-env-volume
+            mountPath: /fastapi_todo_analytics/.env
+            subPath: .env
+            readOnly: true
+      volumes:
+        - name: todo-analytics-env-volume
+          secret:
+            secretName: todo-analytics-secret-env
+---
+# Source: test/templates/dynamodb/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamodb-analytics
+  namespace: todo-analytics
+  labels:
+    app: dynamodb-analytics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dynamodb-analytics
+  template:
+    metadata:
+      labels:
+        app: dynamodb-analytics
+    spec:
+      containers:
+      - name: dynamodb-analytics
+        image: localstack/localstack:latest
+        ports:
+          - containerPort: 4566
+        envFrom:
+          - secretRef:
+              name: todo-analytics
+        volumeMounts:
+          - mountPath: /var/lib/localstack/state
+            name: dynamodb-data
+      volumes:
+        - name: dynamodb-data
+          persistentVolumeClaim:
+            claimName: dynamodb-claim
+---
+# Source: test/templates/fastapi/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo-analytics
+  namespace: todo-analytics
+  labels:
+    app: todo-analytics
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: todo-analytics
+  template:
+    metadata:
+      labels:
+        app: todo-analytics
+    spec:
+      initContainers:
+        - name: wait-for-dynamodb
+          image: busybox
+          command: [ "/bin/sh","-c" ]
+          args: [ "until nc -z dynamodb-analytics 4566; do sleep 1; done;" ]
+
+      containers:
+      - name: todo-analytics
+        image: prokaznik/todo_analytics:0.1.1
+        command: [./entrypoints/fastapi.sh]
+        readinessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        ports:
+        - containerPort: 8000
+        envFrom:
+          - secretRef:
+              name: todo-analytics
+        volumeMounts:
+          - name: todo-analytics-env-volume
+            mountPath: /fastapi_todo_analytics/.env
+            subPath: .env
+            readOnly: true
+      volumes:
+        - name: todo-analytics-env-volume
+          secret:
+            secretName: todo-analytics-secret-env
+---
+# Source: test/templates/fastapi/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: todo-analytics-job
+  namespace: todo-analytics
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      containers:
+      - name: todo-analytics-job
+        image: prokaznik/todo_analytics:0.1.1
+        command: [./entrypoints/schemas.sh]
+        volumeMounts:
+          - name: todo-analytics-env-volume
+            mountPath: /fastapi_todo_analytics/.env
+            subPath: .env
+            readOnly: true
+      volumes:
+        - name: todo-analytics-env-volume
+          secret:
+            secretName: todo-analytics-secret-env
+      restartPolicy: Never

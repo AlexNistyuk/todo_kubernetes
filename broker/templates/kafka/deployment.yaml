@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.kafka.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.kafka.labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.kafka.secret.replicas }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.kafka.labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.kafka.labels | nindent 8 }}
+    spec:
+      initContainers:
+      - name: wait-for-zookeeper
+        image: busybox
+        command: [ "/bin/sh","-c" ]
+        args: [ "until nc -z {{ .Values.zookeeper.secret.host }} {{ .Values.zookeeper.secret.port }}; do sleep 1; done;" ]
+      containers:
+      - name: {{ .Values.kafka.secret.host }}
+        image: {{ .Values.kafka.deployment.image.name }}:{{ .Values.kafka.deployment.image.tag }}
+        ports:
+          - containerPort: {{ .Values.kafka.secret.port }}
+        envFrom:
+          - secretRef:
+              name: {{ .Values.secret.name }}

@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.core.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.core.labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.core.deployment.replicas }}
+  strategy:
+    {{- toYaml .Values.core.deployment.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.core.labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.core.labels | nindent 8 }}
+    spec:
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox
+          command: [ "/bin/sh","-c" ]
+          args: [ "until nc -z {{ .Values.kafka.host }} {{ .Values.kafka.port }}; do sleep 1; done;" ]
+
+      containers:
+      - name: {{ .Values.core.secret.host }}
+        image: {{ .Values.core.deployment.image.name }}:{{ .Values.core.deployment.image.tag }}
+        command: {{ .Values.core.deployment.command }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.core.deployment.probe.path }}
+            port: {{ .Values.core.secret.port }}
+          initialDelaySeconds: {{ .Values.core.deployment.probe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.deployment.probe.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.core.deployment.probe.path }}
+            port: {{ .Values.core.secret.port }}
+          initialDelaySeconds: {{ .Values.core.deployment.probe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.core.deployment.probe.periodSeconds }}
+        ports:
+        - containerPort: {{ .Values.core.secret.port }}
+        envFrom:
+          - secretRef:
+              name: {{ .Values.secret.name }}
+        volumeMounts:
+          - name: {{ .Values.core.deployment.envVolume.name }}
+            mountPath: {{ .Values.core.envFile.directory }}/{{ .Values.core.envFile.name }}
+            subPath: {{ .Values.core.envFile.name }}
+            readOnly: {{ .Values.core.deployment.envVolume.readonly }}
+      volumes:
+        - name: {{ .Values.core.deployment.envVolume.name }}
+          secret:
+            secretName: {{ .Values.core.secret.name }}
