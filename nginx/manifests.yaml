@@ -33,6 +33,9 @@ stringData:
       location /api/v1/tasks {
           proxy_pass ${CORE_SERVICE_URL};
       }
+      location /api/v1/statuses {
+        proxy_pass ${CORE_SERVICE_URL};
+      }
 
       location /api/v1/actions {
           proxy_pass ${ANALYTICS_SERVICE_URL};

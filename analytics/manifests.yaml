@@ -21,7 +21,7 @@ stringData:
     AWS_SECRET_ACCESS_KEY=J7kYlcwCjaKk0gl32XlbgVsKfA7oxAzF
     AWS_REGION=us-east-1
     
-    USER_INFO_URL=http://todo-auth.todo-auth:8000/api/v1/token/user-info
+    USER_INFO_URL=http://todo-auth.todo-auth:8000/api/v1/token/user-info/
     
     KAFKA_URL=kafka-mq.mq:9092
     KAFKA_TOPIC=actions

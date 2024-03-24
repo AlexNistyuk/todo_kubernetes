@@ -13,6 +13,11 @@ metadata:
   namespace: todo-core
 stringData:
   .env: |
+    ALLOW_ORIGINS=["http://localhost:3000", "https://450a-37-45-177-126.ngrok-free.app"]
+    ALLOW_CREDENTIALS=1
+    ALLOW_METHODS=["*"]
+    ALLOW_HEADERS=["*"]
+    
     POSTGRES_HOST=pg-core
     POSTGRES_PORT=5432
     POSTGRES_DB=postgres
@@ -22,10 +27,12 @@ stringData:
     DB_POOL_SIZE=10
     DB_MAX_OVERFLOW=10
     
-    USER_INFO_URL=http://todo-auth.todo-auth:8000/api/v1/token/user-info
+    USER_INFO_URL=http://todo-auth.todo-auth:8000/api/v1/token/user-info/
     
     KAFKA_TOPIC=actions
     KAFKA_URL=kafka-mq.mq:9092
+    
+    DEFAULT_TASK_STATUSES=["To do", "In progress", "In review", "Done"]
 ---
 # Source: test/templates/secret.yaml
 apiVersion: v1
