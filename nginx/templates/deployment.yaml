@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.nginx.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.nginx.labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.nginx.deployment.replicas }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.nginx.labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.nginx.labels | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Values.nginx.secret.host }}
+        image: {{ .Values.nginx.deployment.image.name }}:{{ .Values.nginx.deployment.image.tag }}
+        ports:
+        - containerPort: {{ .Values.nginx.secret.port }}
+        envFrom:
+          - secretRef:
+              name: {{ .Values.secret.name }}
+        volumeMounts:
+          - name: {{ .Values.nginx.deployment.configVolume.name }}
+            mountPath: {{ .Values.nginx.configFile.directory }}/{{ .Values.nginx.configFile.name }}
+            subPath: {{ .Values.nginx.configFile.name }}
+            readOnly: {{ .Values.nginx.deployment.configVolume.readonly }}
+      volumes:
+        - name: {{ .Values.nginx.deployment.configVolume.name }}
+          secret:
+            secretName: {{ .Values.nginx.secret.name }}

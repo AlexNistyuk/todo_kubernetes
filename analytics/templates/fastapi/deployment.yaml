@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.analytics.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.analytics.labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.analytics.deployment.replicas }}
+  strategy:
+    {{- toYaml .Values.analytics.deployment.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.analytics.labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.analytics.labels | nindent 8 }}
+    spec:
+      initContainers:
+        - name: wait-for-dynamodb
+          image: busybox
+          command: [ "/bin/sh","-c" ]
+          args: [ "until nc -z {{ .Values.database.secret.host }} {{ .Values.database.secret.port }}; do sleep 1; done;" ]
+
+      containers:
+      - name: {{ .Values.analytics.secret.host }}
+        image: {{ .Values.analytics.deployment.image.name }}:{{ .Values.analytics.deployment.image.tag }}
+        command: {{ .Values.analytics.deployment.command }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.analytics.deployment.probe.path }}
+            port: {{ .Values.analytics.secret.port }}
+          initialDelaySeconds: {{ .Values.analytics.deployment.probe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.analytics.deployment.probe.periodSeconds }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.analytics.deployment.probe.path }}
+            port: {{ .Values.analytics.secret.port }}
+          initialDelaySeconds: {{ .Values.analytics.deployment.probe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.analytics.deployment.probe.periodSeconds }}
+        ports:
+        - containerPort: {{ .Values.analytics.secret.port }}
+        envFrom:
+          - secretRef:
+              name: {{ .Values.secret.name }}
+        volumeMounts:
+          - name: {{ .Values.analytics.deployment.envVolume.name }}
+            mountPath: {{ .Values.analytics.envFile.directory }}/{{ .Values.analytics.envFile.name }}
+            subPath: {{ .Values.analytics.envFile.name }}
+            readOnly: {{ .Values.analytics.deployment.envVolume.readonly }}
+      volumes:
+        - name: {{ .Values.analytics.deployment.envVolume.name }}
+          secret:
+            secretName: {{ .Values.analytics.secret.name }}

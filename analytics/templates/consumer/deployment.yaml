@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.kafkaConsumer.name }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.kafkaConsumer.labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.kafkaConsumer.replicas }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.kafkaConsumer.labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.kafkaConsumer.labels | nindent 8 }}
+    spec:
+      initContainers:
+        - name: wait-for-kafka
+          image: busybox
+          command: [ "/bin/sh","-c" ]
+          args: [ "until nc -z {{ .Values.kafka.host }} {{ .Values.kafka.port }}; do sleep 1; done;" ]
+
+      containers:
+      - name: {{ .Values.kafkaConsumer.name }}
+        image: {{ .Values.analytics.deployment.image.name }}:{{ .Values.analytics.deployment.image.tag }}
+        command: {{ .Values.kafkaConsumer.command }}
+        volumeMounts:
+          - name: {{ .Values.analytics.deployment.envVolume.name }}
+            mountPath: {{ .Values.analytics.envFile.directory }}/{{ .Values.analytics.envFile.name }}
+            subPath: {{ .Values.analytics.envFile.name }}
+            readOnly: {{ .Values.analytics.deployment.envVolume.readonly }}
+      volumes:
+        - name: {{ .Values.analytics.deployment.envVolume.name }}
+          secret:
+            secretName: {{ .Values.analytics.secret.name }}

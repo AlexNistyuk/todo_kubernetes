@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.nginx.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.nginx.labels | nindent 4 }}
+spec:
+  type: {{ .Values.nginx.service.type }}
+  ports:
+  - name: {{ .Values.nginx.service.name }}
+    port: {{ .Values.nginx.secret.port }}
+    targetPort: {{ .Values.nginx.secret.port }}
+    nodePort: {{ .Values.nginx.service.ports.nodePort }}
+  selector:
+    {{- toYaml .Values.nginx.labels | nindent 4 }}

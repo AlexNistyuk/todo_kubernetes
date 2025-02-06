@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.zookeeper.secret.host }}
+  namespace: {{ .Values.namespace.name }}
+  labels:
+    {{- toYaml .Values.zookeeper.labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.zookeeper.deployment.replicas }}
+  selector:
+    matchLabels:
+      {{- toYaml .Values.zookeeper.labels | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- toYaml .Values.zookeeper.labels | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Values.zookeeper.secret.host }}
+        image: {{ .Values.zookeeper.deployment.image.name }}:{{ .Values.zookeeper.deployment.image.tag }}
+        ports:
+          - containerPort: {{ .Values.zookeeper.secret.port }}
+        envFrom:
+          - secretRef:
+              name: {{ .Values.secret.name }}

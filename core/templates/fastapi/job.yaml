@@ -1,0 +1,23 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .Values.core.job.name }}
+  namespace: {{ .Values.namespace.name }}
+spec:
+  backoffLimit: {{ .Values.core.job.backoffLimit }}
+  template:
+    spec:
+      containers:
+      - name: {{ .Values.core.job.name }}
+        image: {{ .Values.core.deployment.image.name }}:{{ .Values.core.deployment.image.tag }}
+        command: {{ .Values.core.job.command }}
+        volumeMounts:
+          - name: {{ .Values.core.deployment.envVolume.name }}
+            mountPath: {{ .Values.core.envFile.directory }}/{{ .Values.core.envFile.name }}
+            subPath: {{ .Values.core.envFile.name }}
+            readOnly: {{ .Values.core.deployment.envVolume.readonly }}
+      volumes:
+        - name: {{ .Values.core.deployment.envVolume.name }}
+          secret:
+            secretName: {{ .Values.core.secret.name }}
+      restartPolicy: {{ .Values.core.job.restartPolicy }}
